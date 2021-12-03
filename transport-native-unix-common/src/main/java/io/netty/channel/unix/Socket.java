@@ -488,7 +488,14 @@ public class Socket extends FileDescriptor {
     }
 
     public static void initialize() {
-        if (INITIALIZED.compareAndSet(false, true)) {
+        initialize0(false);
+    }
+
+    static synchronized void initialize0(boolean force) {
+        if (force) {
+            INITIALIZED.set(true);
+            initialize(NetUtil.isIpV4StackPreferred());
+        } else if (INITIALIZED.compareAndSet(false, true)) {
             initialize(NetUtil.isIpV4StackPreferred());
         }
     }
