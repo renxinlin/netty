@@ -36,11 +36,13 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         Small,
         Normal
     }
-
+    // 分配 PoolArena 的类，也就是 PoolArena 的构造方法被 PooledByteBufAllocator 调用
     final PooledByteBufAllocator parent;
 
     final int numSmallSubpagePools;
     final int directMemoryCacheAlignment;
+
+    // 小内存区域
     private final PoolSubpage<T>[] smallSubpagePools;
 
     private final PoolChunkList<T> q050;
@@ -78,12 +80,14 @@ abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
         directMemoryCacheAlignment = cacheAlignment;
 
         numSmallSubpagePools = nSubpages;
+        // 小内存数组 [0,1024),[1024,2048),[2048,4096),[4096,8192)
         smallSubpagePools = newSubpagePoolArray(numSmallSubpagePools);
         for (int i = 0; i < smallSubpagePools.length; i ++) {
             smallSubpagePools[i] = newSubpagePoolHead();
         }
 
-        q100 = new PoolChunkList<T>(this, null, 100, Integer.MAX_VALUE, chunkSize);
+        q100 = new PoolChunkList<T /*根据是否直接内存分为ByteBuffer 和 byte[] 数组 */>
+                (this, null, 100, Integer.MAX_VALUE, chunkSize); /* chunkSize 16M 当前算出来是16M 这个值一般在M级别*/
         q075 = new PoolChunkList<T>(this, q100, 75, 100, chunkSize);
         q050 = new PoolChunkList<T>(this, q075, 50, 100, chunkSize);
         q025 = new PoolChunkList<T>(this, q050, 25, 75, chunkSize);

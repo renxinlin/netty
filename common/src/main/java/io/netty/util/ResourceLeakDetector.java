@@ -161,6 +161,7 @@ public class ResourceLeakDetector<T> {
     }
 
     /** the collection of active resources */
+    // 继承自虚引用 用以释放堆外内存
     private final Set<DefaultResourceLeak<?>> allLeaks =
             Collections.newSetFromMap(new ConcurrentHashMap<DefaultResourceLeak<?>, Boolean>());
 
@@ -169,6 +170,7 @@ public class ResourceLeakDetector<T> {
             Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
 
     private final String resourceType;
+    // 内存泄漏检测级别是SIMPLE时，的检测频率，默认113，单位为个，而不是时间。
     private final int samplingInterval;
 
     /**
@@ -259,6 +261,10 @@ public class ResourceLeakDetector<T> {
             }
             return null;
         }
+        /*
+        从垃圾回收器通知的引用队列中找(位于该队列中的引用代表该引用执向的对象已经被垃圾回收器回收了），如果调用close 方法，返回f alse, 说明没有泄露，close 方法第一次调用时，会返回 true,将 DefaultResourceLeak 的 free设置为true,表示已经释放，所以在检测是否泄露的时候，只要内存泄露程序调用 close 不是第一次调用，就可以说明内存未泄露。
+
+         */
         reportLeak();
         return new DefaultResourceLeak(obj, refQueue, allLeaks);
     }
@@ -295,11 +301,14 @@ public class ResourceLeakDetector<T> {
             if (ref == null) {
                 break;
             }
+                /*
 
+                 */
             if (!ref.dispose()) {
+                // 内存未泄露
                 continue;
             }
-
+            // 内存泄露报告
             String records = ref.toString();
             if (reportedLeaks.add(records)) {
                 if (records.isEmpty()) {

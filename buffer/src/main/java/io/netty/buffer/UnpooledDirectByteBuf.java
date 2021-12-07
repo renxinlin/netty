@@ -35,7 +35,7 @@ import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
  * {@link UnpooledByteBufAllocator#directBuffer(int, int)}, {@link Unpooled#directBuffer(int)} and
  * {@link Unpooled#wrappedBuffer(ByteBuffer)} instead of calling the constructor explicitly.
  */
-public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
+public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf /* extends AbstractByteBuf extends ByteBuf  implements ReferenceCounted */ {
 
     private final ByteBufAllocator alloc;
 
@@ -140,6 +140,7 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public ByteBuf capacity(int newCapacity) {
+        // 检测一下访问性，可达性，就是引用数必须大于0，否则该 ByteBuf 的内部空间已经被回收了（堆外内存）。
         checkNewCapacity(newCapacity);
         int oldCapacity = capacity;
         if (newCapacity == oldCapacity) {
@@ -153,10 +154,13 @@ public class UnpooledDirectByteBuf extends AbstractReferenceCountedByteBuf {
             bytesToCopy = newCapacity;
         }
         ByteBuffer oldBuffer = buffer;
+        // 创建新的缓存区
         ByteBuffer newBuffer = allocateDirect(newCapacity);
         oldBuffer.position(0).limit(bytesToCopy);
         newBuffer.position(0).limit(bytesToCopy);
+
         newBuffer.put(oldBuffer).clear();
+        // 构建新的缓冲区的引用关系 并且尝试释放老的缓冲区
         setByteBuffer(newBuffer, true);
         return this;
     }

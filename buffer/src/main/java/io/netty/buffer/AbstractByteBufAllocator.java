@@ -41,12 +41,13 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         ResourceLeakTracker<ByteBuf> leak;
         switch (ResourceLeakDetector.getLevel()) {
             case SIMPLE:
-                leak = AbstractByteBuf.leakDetector.track(buf);
+                // 同时会进行咨询泄露报告
+                leak = AbstractByteBuf.leakDetector.track(buf); // 以一个时间间隔，默认是每创建113个直接内存（堆外内存）时检测一次。
                 if (leak != null) {
                     buf = new SimpleLeakAwareByteBuf(buf, leak);
                 }
                 break;
-            case ADVANCED:
+            case ADVANCED: // 每次产生一个堆外内存，目前这两个在Netty的实现中等价，统一用ADVANCED来实现。
             case PARANOID:
                 leak = AbstractByteBuf.leakDetector.track(buf);
                 if (leak != null) {
@@ -61,6 +62,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     protected static CompositeByteBuf toLeakAwareBuffer(CompositeByteBuf buf) {
         ResourceLeakTracker<ByteBuf> leak;
+        // 内存泄露探测的级别
         switch (ResourceLeakDetector.getLevel()) {
             case SIMPLE:
                 leak = AbstractByteBuf.leakDetector.track(buf);
@@ -257,11 +259,11 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
                     minNewCapacity, maxCapacity));
         }
         final int threshold = CALCULATE_THRESHOLD; // 4 MiB page
-
+        // 等于4M直接返回
         if (minNewCapacity == threshold) {
             return threshold;
         }
-
+        // 大于4M 则每次加4M
         // If over threshold, do not double but just increase by threshold.
         if (minNewCapacity > threshold) {
             int newCapacity = minNewCapacity / threshold * threshold;
@@ -274,6 +276,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         }
 
         // 64 <= newCapacity is a power of 2 <= threshold
+        // 小于4M 则判断是否小于64 byte  小于则为64  之后扩1倍
         final int newCapacity = MathUtil.findNextPositivePowerOfTwo(Math.max(minNewCapacity, 64));
         return Math.min(newCapacity, maxCapacity);
     }

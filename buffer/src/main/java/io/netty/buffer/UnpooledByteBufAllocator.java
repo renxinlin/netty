@@ -93,6 +93,7 @@ public final class UnpooledByteBufAllocator extends AbstractByteBufAllocator imp
         } else {
             buf = new InstrumentedUnpooledDirectByteBuf(this, initialCapacity, maxCapacity);
         }
+        // toLeakAwareBuffer 底层会借助虚引用采样进行资源泄露报告
         return disableLeakDetector ? buf : toLeakAwareBuffer(buf);
     }
 

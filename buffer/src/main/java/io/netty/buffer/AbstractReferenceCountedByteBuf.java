@@ -41,6 +41,7 @@ public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
         }
     };
 
+    // 借助 volatile和  ReferenceCountUpdater 原子引用的cas完成修改操作
     // Value might not equal "real" reference count, all access should be via the updater
     @SuppressWarnings({"unused", "FieldMayBeFinal"})
     private volatile int refCnt = updater.initialValue();

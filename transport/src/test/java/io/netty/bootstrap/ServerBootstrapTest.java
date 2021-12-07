@@ -24,10 +24,15 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalEventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.channel.nio.NioEventLoop;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AttributeKey;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -43,49 +48,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ServerBootstrapTest {
-
-    @Test
-    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
-    public void testHandlerRegister() throws Exception {
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicReference<Throwable> error = new AtomicReference<Throwable>();
-        LocalEventLoopGroup group = new LocalEventLoopGroup(1);
-        try {
-            ServerBootstrap sb = new ServerBootstrap();
-            sb.channel(LocalServerChannel.class)
-              .group(group)
-              .childHandler(new ChannelInboundHandlerAdapter())
-              .handler(new ChannelHandlerAdapter() {
-                  @Override
-                  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-                      try {
-                          assertTrue(ctx.executor().inEventLoop());
-                      } catch (Throwable cause) {
-                          error.set(cause);
-                      } finally {
-                          latch.countDown();
-                      }
-                  }
-              });
-            sb.register().syncUninterruptibly();
-            latch.await();
-            assertNull(error.get());
-        } finally {
-            group.shutdownGracefully();
-        }
-    }
-
-    @Test
-    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
-    public void testParentHandler() throws Exception {
-        testParentHandler(false);
-    }
-
-    @Test
-    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
-    public void testParentHandlerViaChannelInitializer() throws Exception {
-        testParentHandler(true);
-    }
 
     private static void testParentHandler(boolean channelInitializer) throws Exception {
         final LocalAddress addr = new LocalAddress(UUID.randomUUID().toString());
@@ -147,6 +109,91 @@ public class ServerBootstrapTest {
         }
     }
 
+    private static void testParentHandler1(boolean channelInitializer) throws Exception {
+
+
+        NioEventLoopGroup servergroup = new NioEventLoopGroup(2);
+        NioEventLoopGroup iogroup = new NioEventLoopGroup();
+        final NioEventLoopGroup workergroup = new NioEventLoopGroup(2);
+        Channel sch = null;
+        try {
+            ServerBootstrap sb = new ServerBootstrap();
+            sb
+                    .channel(NioServerSocketChannel.class)
+                    .group(servergroup, iogroup)
+                    .option(ChannelOption.SO_BACKLOG,1024)
+                    .childOption(ChannelOption.CONNECT_TIMEOUT_MILLIS,5000) // 启动2s延时任务检查
+                    .handler(new SimpleChannelInboundHandler<SocketChannel>() {
+                        @Override
+                        protected void channelRead0(ChannelHandlerContext ctx, SocketChannel msg) throws Exception {
+                            System.out.println("log new friend in...");
+                        }
+                    })
+//                    .handler()
+                    // 每accept一个socketchannel时,如何初始化
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ch.pipeline().addLast(workergroup, new SimpleChannelInboundHandler<Object>() {
+                                @Override
+                                protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+
+                                }
+                            });
+
+                        }
+                    });
+            sb.bind(8008).sync();
+
+
+        } finally {
+
+        }
+    }
+
+    @Test
+    @Timeout(value = 5000, unit = TimeUnit.MILLISECONDS)
+    public void testHandlerRegister() throws Exception {
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicReference<Throwable> error = new AtomicReference<Throwable>();
+        LocalEventLoopGroup group = new LocalEventLoopGroup(1);
+        try {
+            ServerBootstrap sb = new ServerBootstrap();
+            sb.channel(LocalServerChannel.class)
+                    .group(group)
+                    .childHandler(new ChannelInboundHandlerAdapter())
+                    .handler(new ChannelHandlerAdapter() {
+                        @Override
+                        public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+                            try {
+                                assertTrue(ctx.executor().inEventLoop());
+                            } catch (Throwable cause) {
+                                error.set(cause);
+                            } finally {
+                                latch.countDown();
+                            }
+                        }
+                    });
+            sb.register().syncUninterruptibly();
+            latch.await();
+            assertNull(error.get());
+        } finally {
+            group.shutdownGracefully();
+        }
+    }
+
+    @Test
+    @Timeout(value = 3000, unit = TimeUnit.MILLISECONDS)
+    public void testParentHandler() throws Exception {
+        testParentHandler(false);
+    }
+
+    @Test
+    public void testParentHandlerViaChannelInitializer() throws Exception {
+//        testParentHandler(true);
+        testParentHandler1(true);
+    }
+
     @Test
     public void optionsAndAttributesMustBeAvailableOnChildChannelInit() throws InterruptedException {
         EventLoopGroup group = new DefaultEventLoopGroup(1);
@@ -156,7 +203,6 @@ public class ServerBootstrapTest {
         ServerBootstrap sb = new ServerBootstrap()
                 .group(group)
                 .channel(LocalServerChannel.class)
-                .childOption(ChannelOption.CONNECT_TIMEOUT_MILLIS, 4242)
                 .childAttr(key, "value")
                 .childHandler(new ChannelInitializer<LocalChannel>() {
                     @Override

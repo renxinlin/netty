@@ -41,7 +41,13 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     private static final int DEFAULT_NUM_HEAP_ARENA;
     private static final int DEFAULT_NUM_DIRECT_ARENA;
 
-    private static final int DEFAULT_PAGE_SIZE;
+    private static final int DEFAULT_PAGE_SIZE;// 默认 pageSize 大小， 最小为4K, 默认为8K
+    /*
+    每个 chunk 中的 page 用平衡二叉树映射管理
+    每个 PoolSubpage 是否被分配，maxOrder 为树的深度，
+    深度为 maxOrder 层的节点数量为 1 << maxOrder。
+
+     */
     private static final int DEFAULT_MAX_ORDER; // 8192 << 11 = 16 MiB per chunk
     private static final int DEFAULT_SMALL_CACHE_SIZE;
     private static final int DEFAULT_NORMAL_CACHE_SIZE;
@@ -62,6 +68,33 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         }
     };
 
+    public static void main(String[] args) {
+        final Runtime runtime = Runtime.getRuntime();
+
+        /*
+         * We use 2 * available processors by default to reduce contention as we use 2 * available processors for the
+         * number of EventLoops in NIO and EPOLL as well. If we choose a smaller number we will run into hot spots as
+         * allocation and de-allocation needs to be synchronized on the PoolArena.
+         *
+         * See https://github.com/netty/netty/issues/3888.
+         */
+        final int defaultMinNumArena = NettyRuntime.availableProcessors() * 2;
+        final int defaultChunkSize = DEFAULT_PAGE_SIZE << DEFAULT_MAX_ORDER;
+        System.out.println( Math.max(0,
+                SystemPropertyUtil.getInt(
+                        "io.netty.allocator.numHeapArenas",
+                        (int) Math.min(
+                                defaultMinNumArena,
+                                runtime.maxMemory() / defaultChunkSize / 2 / 3))));
+        System.out.println( Math.max(0,
+                SystemPropertyUtil.getInt(
+                        "io.netty.allocator.numDirectArenas",
+                        (int) Math.min(
+                                defaultMinNumArena,
+                                PlatformDependent.maxDirectMemory() / defaultChunkSize / 2 / 3))));
+
+
+    }
     static {
         int defaultAlignment = SystemPropertyUtil.getInt(
                 "io.netty.allocator.directMemoryCacheAlignment", 0);
@@ -116,7 +149,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
         // cache sizes
         DEFAULT_SMALL_CACHE_SIZE = SystemPropertyUtil.getInt("io.netty.allocator.smallCacheSize", 256);
         DEFAULT_NORMAL_CACHE_SIZE = SystemPropertyUtil.getInt("io.netty.allocator.normalCacheSize", 64);
-
+        // 与本地线程分配有关，tiny内存、small内存的数量，在内存分配算法时重点剖析。
         // 32 kb is the default maximum capacity of the cached buffer. Similar to what is explained in
         // 'Scalable memory allocation using jemalloc'
         DEFAULT_MAX_CACHED_BUFFER_CAPACITY = SystemPropertyUtil.getInt(
